@@ -1,63 +1,69 @@
-variable environment {
+variable "environment" {
   type        = string
-  description = "The current working environment"
+  description = "Deployment environment"
 }
 
-variable project {
+variable "region" {
   type        = string
-  description = "The project the work belongs to"
-  default     = "basetier"
+  description = "AWS region"
+  default     = "eu-west-1"
 }
 
-variable usage {
+variable "created_by" {
   type        = string
+  description = "Repository identifier for tagging"
+  default     = "data/pipelines/lakehouse/core/callminer-bulk-pipeline"
+}
+
+variable "extra_tags" {
+  type        = map(string)
+  description = "Additional resource tags"
+  default     = {}
+}
+
+variable "bulkapi_storage_target_name" {
+  type        = string
+  description = "CallMiner storage target name used by the export job"
+}
+
+variable "bulk_job_name" {
+  type        = string
+  description = "Optional explicit scheduled job name"
   default     = ""
 }
 
-variable category {
+variable "bulk_job_previous_name" {
   type        = string
-  description = "The category of the project"
-  default     = "ingestion"
+  description = "Optional previous scheduled job name for rename fallback"
+  default     = ""
 }
 
-variable component {
+variable "schedule_expression" {
   type        = string
-  description = "The component of the project"
-  default     = "landing"
+  description = "EventBridge schedule for sync reconciliation"
+  default     = "rate(1 day)"
 }
 
-variable created_by {
+variable "callminer_bulk_api_base_url" {
   type        = string
-  description = "The repo this work is contained in"
-  default     = "data/pipelines/lakehouse/jobs/callminer"
+  description = "CallMiner Bulk API base URL"
+  default     = "https://apiuk.callminer.net/bulkexport"
 }
 
-variable subscription_role_arn {
+variable "callminer_idp_base_url" {
   type        = string
-  description = "The ARN of an IAM role that grants CW logs permissions to deliver log events to the destination"
+  description = "CallMiner IDP base URL"
+  default     = "https://idpuk.callminer.net"
 }
 
-variable firehose_destination_arn {
+variable "callminer_bulk_scope" {
   type        = string
-  description = "The ARN of the destination to deliver matching log events to."
+  description = "CallMiner OAuth scope for bulk export"
+  default     = "https://callminer.net/auth/platform-bulkexport"
 }
 
-variable project_version {
+variable "log_level" {
   type        = string
-  description = "The current version of the project "
-}
-
-variable bulkapi_storage_target_name {
-  type        = string
-  description = "CallMiner Bulk API storage target name that maps to the holding zone export destination"
-}
-
-variable bulkapi_holding_bucket_name {
-  type        = string
-  description = "S3 bucket used as CallMiner Bulk API export destination"
-}
-
-variable bulkapi_holding_prefix {
-  type        = string
-  description = "S3 prefix used as CallMiner Bulk API export destination"
+  description = "Scheduler Lambda log level"
+  default     = "INFO"
 }

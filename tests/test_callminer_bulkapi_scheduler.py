@@ -1,10 +1,11 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from CallMinerBulkApiSchedulerLambda import (
+from src.CallMinerBulkApiSchedulerLambda import (
     ApiError,
     CallMinerBulkApiClient,
     CallMinerBulkScheduler,
@@ -12,6 +13,7 @@ from CallMinerBulkApiSchedulerLambda import (
     SchedulerConfig,
     ValidationError,
     build_rerun_job_name,
+    lambda_handler,
     merge_duration,
     normalize_event,
 )
@@ -102,6 +104,41 @@ class EventContractTests(unittest.TestCase):
                     },
                 }
             )
+
+    def test_rerun_rejects_search_mode_override(self):
+        with self.assertRaises(ValidationError):
+            normalize_event(
+                {
+                    "mode": "rerun",
+                    "rerun": {
+                        "duration": {
+                            "SearchMode": "AgentTalkDate",
+                            "LastNDays": 1,
+                        }
+                    },
+                }
+            )
+
+
+class ConfigValidationTests(unittest.TestCase):
+    def _base_env(self):
+        return {
+            "BULK_JOB_TEMPLATE_JSON": '{"Duration":{"SearchMode":"ClientCaptureDate","LastNDays":1}}',
+            "BULK_JOB_NAME": "MyScheduledJob",
+            "CALLMINER_AUTH_SECRET_NAME": "my-secret",
+        }
+
+    def test_config_rejects_missing_job_name(self):
+        env = self._base_env()
+        env["BULK_JOB_NAME"] = ""
+        with self.assertRaises(ValidationError):
+            SchedulerConfig.from_env(env)
+
+    def test_config_rejects_template_without_duration(self):
+        env = self._base_env()
+        env["BULK_JOB_TEMPLATE_JSON"] = '{"Name":"BadTemplate"}'
+        with self.assertRaises(ValidationError):
+            SchedulerConfig.from_env(env)
 
 
 class NamingTests(unittest.TestCase):
@@ -288,6 +325,67 @@ class ApiClientTests(unittest.TestCase):
         self.assertIn("grant_type=client_credentials", token_call["body"].decode("utf-8"))
         self.assertEqual(jobs_call["headers"]["Authorization"], "Bearer token-123")
 
+    def test_token_request_requires_access_token_field(self):
+        config = SchedulerConfig(
+            bulk_api_base_url="https://apiuk.callminer.net/bulkexport",
+            idp_base_url="https://idpuk.callminer.net",
+            scope="https://callminer.net/auth/platform-bulkexport",
+            auth_secret_name="bulk-secret",
+            job_name="Job",
+            previous_job_name=None,
+            template_payload={"Duration": {}},
+        )
+        sender = FakeSender(responses=[(200, '{"token_type":"Bearer"}')])
+        client = CallMinerBulkApiClient(
+            config=config,
+            secrets_reader=FakeSecretsReader({"client_id": "cid", "client_secret": "csecret"}),
+            sender=sender,
+        )
+
+        with self.assertRaises(ApiError):
+            client.get_access_token()
+
+    def test_list_jobs_supports_items_wrapper_shape(self):
+        config = SchedulerConfig(
+            bulk_api_base_url="https://apiuk.callminer.net/bulkexport",
+            idp_base_url="https://idpuk.callminer.net",
+            scope="https://callminer.net/auth/platform-bulkexport",
+            auth_secret_name="bulk-secret",
+            job_name="Job",
+            previous_job_name=None,
+            template_payload={"Duration": {}},
+        )
+        sender = FakeSender(responses=[(200, '{"Items":[{"Id":"1","Name":"Job"}]}')])
+        client = CallMinerBulkApiClient(
+            config=config,
+            secrets_reader=FakeSecretsReader({"client_id": "cid", "client_secret": "csecret"}),
+            sender=sender,
+        )
+
+        jobs = client.list_jobs("token-123")
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["Name"], "Job")
+
+    def test_list_jobs_rejects_unexpected_response_shape(self):
+        config = SchedulerConfig(
+            bulk_api_base_url="https://apiuk.callminer.net/bulkexport",
+            idp_base_url="https://idpuk.callminer.net",
+            scope="https://callminer.net/auth/platform-bulkexport",
+            auth_secret_name="bulk-secret",
+            job_name="Job",
+            previous_job_name=None,
+            template_payload={"Duration": {}},
+        )
+        sender = FakeSender(responses=[(200, '{"count":1}')])
+        client = CallMinerBulkApiClient(
+            config=config,
+            secrets_reader=FakeSecretsReader({"client_id": "cid", "client_secret": "csecret"}),
+            sender=sender,
+        )
+
+        with self.assertRaises(ApiError):
+            client.list_jobs("token-123")
+
 
 class DurationMergeTests(unittest.TestCase):
     def test_timeframe_override_clears_last_n_days(self):
@@ -348,6 +446,34 @@ class DurationMergeTests(unittest.TestCase):
         self.assertIsNone(merged["TimeFrame"])
         self.assertIsNone(merged["StartDate"])
         self.assertIsNone(merged["EndDate"])
+
+
+class HandlerWiringTests(unittest.TestCase):
+    def test_lambda_handler_returns_scheduler_result_with_ok_status(self):
+        env = {
+            "BULK_JOB_TEMPLATE_JSON": '{"Duration":{"SearchMode":"ClientCaptureDate","LastNDays":1}}',
+            "BULK_JOB_NAME": "ScheduledJob",
+            "CALLMINER_AUTH_SECRET_NAME": "bulk-secret",
+        }
+
+        with patch.dict(os.environ, env, clear=True):
+            with patch("src.CallMinerBulkApiSchedulerLambda.SecretsManagerReader"):
+                with patch("src.CallMinerBulkApiSchedulerLambda.CallMinerBulkApiClient"):
+                    with patch("src.CallMinerBulkApiSchedulerLambda.CallMinerBulkScheduler") as scheduler_cls:
+                        scheduler_instance = scheduler_cls.return_value
+                        scheduler_instance.handle.return_value = {
+                            "mode": "sync",
+                            "action": "would_create",
+                            "job_name": "ScheduledJob",
+                            "dry_run": True,
+                        }
+
+                        result = lambda_handler({"mode": "sync", "dry_run": True}, None)
+
+                        self.assertEqual(result["status"], "ok")
+                        self.assertEqual(result["action"], "would_create")
+                        self.assertTrue(result["dry_run"])
+                        scheduler_instance.handle.assert_called_once_with({"mode": "sync", "dry_run": True})
 
 
 if __name__ == "__main__":

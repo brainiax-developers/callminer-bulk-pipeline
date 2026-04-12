@@ -48,6 +48,7 @@ Thumbs.db
 *terraform.tfstate.lock.info
 *terraform.tfstate
 /tf/tfplan*
+/tf/callminer_bulkapi_scheduler.zip
 
 
 # venv
