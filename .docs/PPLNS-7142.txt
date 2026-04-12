@@ -1,0 +1,4 @@
+CallMiner Workflow when runs and encounters any failure then after pushing the notification to ops genie sns, the same is not finishing as a Failure. As a result, to find the failure instance is becoming a tedious process. This happens even though the Job has failed the overall status is marked as SUCCEDED. 
+Changes Required:
+    • Rewire the present workflow, so that once the SNS Notification is completed the workflow instance marks itself as a failure. 
+    • If possible, try to fetch the error coming out from the lambda and populate the same rather than the general message (Callminer lamda function failed after 3 attempts or function Timeout) that presently is being showed. 

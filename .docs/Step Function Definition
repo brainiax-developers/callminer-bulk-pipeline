@@ -1,0 +1,150 @@
+{
+  "Comment": "A workflow of the landing lambda and the transfer lambda for the Callminer ingestion",
+  "StartAt": "CheckRerunExist",
+  "States": {
+    "CheckRerun": {
+      "Choices": [
+        {
+          "BooleanEquals": true,
+          "Next": "WaitForRerun",
+          "Variable": "$.detail.rerun"
+        }
+      ],
+      "Default": "Landing",
+      "Type": "Choice"
+    },
+    "CheckRerunExist": {
+      "Choices": [
+        {
+          "IsPresent": true,
+          "Next": "CheckRerun",
+          "Variable": "$.detail.rerun"
+        },
+        {
+          "IsPresent": false,
+          "Next": "Landing",
+          "Variable": "$.detail.rerun"
+        }
+      ],
+      "Default": "Landing",
+      "Type": "Choice"
+    },
+    "Events": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Mark_Events_Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "Transfer",
+      "Resource": "arn:aws:lambda:eu-west-1:066901268285:function:dev-ingestion-callminer-events",
+      "ResultPath": "$.taskresult",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "FailState": {
+      "Cause": "See SNS message and $.error in the state input for details",
+      "Error": "ExecutionFailed",
+      "Type": "Fail"
+    },
+    "Landing": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Mark_Landing_Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "Next": "Events",
+      "Resource": "arn:aws:lambda:eu-west-1:066901268285:function:dev-ingestion-callminer-landing",
+      "ResultPath": "$.taskresult",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "Mark_Events_Failed": {
+      "Next": "Send_SNS_Message",
+      "Result": "Events",
+      "ResultPath": "$.failedState",
+      "Type": "Pass"
+    },
+    "Mark_Landing_Failed": {
+      "Next": "Send_SNS_Message",
+      "Result": "Landing",
+      "ResultPath": "$.failedState",
+      "Type": "Pass"
+    },
+    "Mark_Transfer_Failed": {
+      "Next": "Send_SNS_Message",
+      "Result": "Transfer",
+      "ResultPath": "$.failedState",
+      "Type": "Pass"
+    },
+    "Send_SNS_Message": {
+      "Next": "FailState",
+      "Parameters": {
+        "Message.$": "States.Format('Callminer {} failed: {} - {}', $.failedState, $.error.Error, $.error.Cause)",
+        "MessageAttributes": {
+          "tags": {
+            "DataType": "String",
+            "StringValue": "dev"
+          }
+        },
+        "TopicArn": "arn:aws:sns:eu-west-1:066901268285:dev-lakehouse-network-core-opsgenie-alerting"
+      },
+      "Resource": "arn:aws:states:::sns:publish",
+      "Type": "Task"
+    },
+    "Transfer": {
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Mark_Transfer_Failed",
+          "ResultPath": "$.error"
+        }
+      ],
+      "End": true,
+      "Resource": "arn:aws:lambda:eu-west-1:066901268285:function:dev-ingestion-callminer-transfer",
+      "Retry": [
+        {
+          "BackoffRate": 1,
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 3
+        }
+      ],
+      "Type": "Task"
+    },
+    "WaitForRerun": {
+      "Next": "Landing",
+      "Seconds": 3600,
+      "Type": "Wait"
+    }
+  }
+}

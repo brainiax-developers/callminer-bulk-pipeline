@@ -1,0 +1,271 @@
+Here’s a Codex-ready summary of the Current CallMiner Implementation document. It describes a scheduled AWS-based pipeline that ingests CallMiner speech analytics data into S3, then transfers it into a SAS bucket for Customer Care consumption. The implementation is in Scala, built around AWS Lambda and AWS Step Functions, and is split into two main stages: ingestion and transfer.
+
+Executive summary
+
+The system pulls CallMiner speech analytics data from the Eureka/CallMiner API on a schedule, writes raw results into a landing S3 bucket, then copies those files into a second SAS S3 bucket under a different naming/prefix convention. The process used to be driven by separate scheduled Lambdas, but now a Step Functions state machine orchestrates them sequentially so that transfer runs after a successful landing job. Manual reruns can be done either by editing Lambda environment-variable overrides or, more cleanly, by manually executing the Step Function with override parameters.
+
+High-level architecture
+
+There are two Lambdas:
+
+Landing / ingestion Lambda
+Name pattern: {env}-ingestion-callminer-landing
+Purpose: call the CallMiner API, fetch updated data, and store JSON files in the landing S3 bucket.
+Transfer Lambda
+Name pattern: {env}-ingestion-callminer-transfer
+Purpose: copy landed files from the landing bucket to the SAS bucket, rewriting the prefix and filename format.
+
+These are now chained by a Step Functions state machine named roughly {env}_callminer, shown on page 13 as a very simple two-step workflow: Landing → Transfer. The page 13 diagram confirms the design is intentionally minimal: one task for landing, one for transfer, then end.
+
+Business context
+
+The data lands in an S3 landing zone, then is transferred into a SAS bucket where it is consumed by the Customer Care team. The document also lists business contacts and escalation references, including backlog items like PPLNS-58 and later implementation changes such as PPLNS-2938 for Step Function override support.
+
+Ingestion process
+
+The ingestion flow uses CallMiner’s API in two stages:
+
+1) Authentication
+
+A separate security API is used. Required credentials are:
+
+apiKey
+username
+password
+
+The response is a bearer token, used for later API calls as an OAuth 2.0 bearer token. The document notes the token arrives wrapped in quotation marks and those need trimming.
+
+2) lastupdated export call
+
+The core endpoint is GET /api/v2/export/lastupdated. Required parameters:
+
+startDate in dd/MM/yyyy HH:mm
+endDate in dd/MM/yyyy HH:mm
+page as an integer
+
+The response is a JSON list. The important fields called out are:
+
+Contact.Id
+RecordInfo.TotalRowCount
+
+Pagination is based on ceil(TotalRowCount / 50.0), because 50 is the maximum/default number of records returned by the API per page. The implementation extracts Contact.Id values from the response objects.
+
+Scheduling and timing behavior
+
+The ingestion Lambda runs every 20 minutes. However, the data captured is intentionally delayed by about one hour to allow CallMiner records to settle and pick up updates, not just initial creates. The example in the doc says a process kicking off at 9:20 a.m. captures data between 8:00 and 8:20 a.m.
+
+Important nuance: the document repeatedly warns that this timing can behave incorrectly around clock changes / DST, so logs should be checked to confirm the actual time window passed to the API. That is one of the “here be dragons” parts of the current design.
+
+At the very end of the document, there is a newer note that the 20-minute delay for override values has been resolved, and manual reruns should now use the exact override time desired. That means the document contains some historical behavior that was later superseded. A Codex handoff should treat the timing logic as an area needing careful verification because older and newer notes are both present.
+
+Landing bucket behavior
+
+The landing Lambda writes to bucket:
+
+{env}-hubs-data-landing-zone-s3
+
+Under prefix:
+
+callminer/date={YYYY-MM-dd}/time={HH:mm}/export-controller
+
+And files use the format:
+
+export-controller-{sequential_num}.json
+
+The sequence number is zero-padded to 4 digits, for example 0001, 0002, etc., preserving lexical order in S3.
+
+The landing prefix and filename scheme are described on pages 2–3 and summarized again on page 7.
+
+Transfer process
+
+The transfer Lambda copies files from:
+
+landing bucket: {env}-hubs-data-landing-zone-s3
+
+to:
+
+SAS bucket: {env}-sas-xops-pii-base
+
+The SAS destination prefix is:
+
+customer services/input/callminer/date_YYYY_MM_DD/time_HH_MM/
+
+And filenames become:
+
+export-controller-{HH}-{MM}-{sequential_num}.json
+
+Example:
+
+export-controller-09-20-0003.json
+
+That means the file came from the 09:20 ingestion run and was the third file in that batch. The transfer naming embeds the ingestion time into the filename, unlike the landing bucket where time is only present in the path.
+
+The transfer section also notes that the process first checks whether the destination SAS bucket is empty, then retrieves objects from landing and adapts prefixes/names accordingly. One sentence says it retrieves objects for the previous day based on the current date, which seems a bit odd given the earlier statement that transfer runs right after landing every 20 minutes. That inconsistency is worth flagging for Codex review because it suggests either:
+
+the process evolved over time and the doc was not fully updated, or
+there are different transfer modes for schedule vs rerun.
+Configuration: landing Lambda
+
+The landing Lambda uses:
+
+config file: landing-{env}.conf under src/main/resources
+environment variables for most runtime settings
+Secrets Manager for API credentials.
+Config file
+
+Root object identifier:
+
+api
+
+Inside it:
+
+credentials_secret = Secrets Manager secret name
+
+Secret contents:
+
+apiKey
+username
+password
+Key environment variables
+LANDING_S3_BUCKET
+LANDING_S3_PREFIX
+LANDING_KMS_KEY_ID
+CONFIG_RESOURCE
+periodLength
+RATE_LIMIT_SLEEP
+
+Notable details:
+
+LANDING_S3_PREFIX may include placeholders like {YYYY}, {MM}, {dd}, {HH:mm}.
+RATE_LIMIT_SLEEP exists because CallMiner has a fixed rate limit of 60. The doc explicitly says: do not change this from 60. The Lambda decrements remaining calls and sleeps for 60 seconds when exhausted.
+Optional override variables
+OVERRIDE_DATE as YYYY-MM-DD
+OVERRIDE_HOUR as 0–23
+OVERRIDE_MINUTE as 0–59
+PERIOD_LENGTH as 20–120
+
+The doc says if PERIOD_LENGTH is outside 20–120, the Lambda fails and sends valid exceptions through Slack. It also says if you pass overrides, you must include PERIOD_LENGTH alongside the override date/hour/minute or the default 20-minute period is used.
+
+Configuration: transfer Lambda
+
+The transfer Lambda is configured entirely through environment variables:
+
+Required:
+
+LANDING_S3_BUCKET
+LANDING_S3_PREFIX
+SAS_S3_BUCKET
+SAS_S3_PREFIX
+
+Optional:
+
+OVERRIDE_DATE
+OVERRIDE_HOUR
+OVERRIDE_MINUTE
+
+The transfer Lambda also accepts single-digit hour/minute overrides and pads them internally, for example 9 instead of 09.
+
+The transfer rerun behavior differs from the older ingestion behavior:
+
+For transfer overrides, there is said to be no 20-minute delay.
+If you want to transfer a full day of data, you can provide just OVERRIDE_DATE and leave hour/minute blank, and it will transfer all files for that date.
+Deployment
+
+Deployment is done with Terraform. Environment-specific Terraform lives under:
+
+tf/live/<env>
+
+The landing and transfer resources are kept together and mostly split by AWS resource type, with CloudWatch resources and dashboards broken out separately. The deployment section appears on page 9, and the page 9 screenshot reinforces the repo and directory structure visually.
+
+Manual rerun procedures
+
+The document gives two rerun methods.
+
+Old/manual Lambda rerun flow
+
+Pages 9–12 show the AWS Console workflow:
+
+locate the Lambda by searching for callminer
+open the function
+edit environment variables
+set OVERRIDE_DATE, OVERRIDE_HOUR, OVERRIDE_MINUTE, PERIOD_LENGTH
+save
+create/select a test event
+run the Lambda with the test event
+inspect logs and S3 output.
+
+The screenshots on pages 9, 10, and 12 show the exact AWS Console screens for filtering Lambdas, editing environment variables, and creating/running a test event. Those pages are useful operationally but do not add much architecture beyond confirming the process is console-driven and override-based.
+
+New/preferred Step Function rerun flow
+
+Pages 13–14 describe the newer approach:
+
+manually execute the {env}_callminer Step Function
+pass override values in the event payload under detail
+the Step Function passes those values to both Lambdas automatically.
+
+Example payload shape:
+
+{
+  "version": "0",
+  "id": "callminer_rerun_22_oct_18_00",
+  "detail-type": "Scheduled Event",
+  "resources": [
+    "arn:aws:events:eu-west-1:729864353414:rule/prod_callminer_step_function_event_rule"
+  ],
+  "detail": {
+    "OVERRIDE_DATE": "2023-10-22",
+    "OVERRIDE_HOUR": "18",
+    "OVERRIDE_MINUTE": "00",
+    "PERIOD_LENGTH": "20"
+  }
+}
+
+The doc explicitly says the mandatory part is the detail object with those override fields. That is probably the operational path Codex should prefer documenting or automating.
+
+Monitoring and alerting
+
+The document mentions Tivoli alert codes:
+
+DS005 for Landing Lambda
+DS006 for Transfer Lambda.
+Gaps, ambiguities, and likely technical debt
+
+There are several places where the document smells like “living documentation that survived multiple refactors”:
+
+Timing logic is internally inconsistent
+Older sections describe a one-hour delay and warn about DST drift; the final page says override timing has since been fixed. Codex should treat all time-window logic as something to confirm in code, not trust blindly from prose.
+Transfer cadence vs “previous day” wording is murky
+Early sections say transfer runs every 20 minutes immediately after landing; later text says transfer retrieves previous-day objects based on current date. That is suspicious and should be validated in implementation.
+Repository reference is messy
+Page 1 points to a Bitbucket repo and even says “Can’t find link,” which is not exactly inspiring confidence. That suggests the repo URL in the doc may be stale.
+State machine supersedes some manual procedures
+The document still includes detailed Lambda-by-Lambda rerun instructions, but pages 13–14 imply Step Functions should now be the preferred manual rerun mechanism.
+Data retention note is vague
+The doc says data is currently stored indefinitely in the bucket, but retention controls are expected later. That means lifecycle policies may not have been formalized at the time of writing.
+Recommended Codex handoff notes
+
+Pass this to Codex as the practical brief:
+
+This is a Scala + AWS Lambda + Step Functions ingestion pipeline for CallMiner speech analytics data.
+There are two core jobs:
+landing Lambda: fetches CallMiner lastupdated data and stores JSON files in landing S3.
+transfer Lambda: copies landed files to SAS S3 with renamed prefixes/files.
+The current orchestration model is a Step Function named {env}_callminer, running landing then transfer. Manual reruns should preferably go through this state machine using detail.OVERRIDE_* fields.
+Landing output path format:
+callminer/date={YYYY-MM-dd}/time={HH:mm}/export-controller/export-controller-{####}.json
+SAS output path format:
+customer services/input/callminer/date_YYYY_MM_DD/time_HH_MM/export-controller-{HH}-{MM}-{####}.json
+CallMiner API flow is:
+authenticate with apiKey, username, password
+call /api/v2/export/lastupdated
+paginate using RecordInfo.TotalRowCount / 50
+extract Contact.Id values from results.
+Secrets come from AWS Secrets Manager via credentials_secret in landing-{env}.conf.
+Rate limiting is hardcoded conceptually around a limit of 60; doc says do not change RATE_LIMIT_SLEEP from 60.
+Key risk areas to inspect in code:
+actual time-window calculation
+DST handling
+whether transfer uses current period vs previous day
+whether override behavior matches the newer Step Function docs
+lifecycle/retention handling for landed data.

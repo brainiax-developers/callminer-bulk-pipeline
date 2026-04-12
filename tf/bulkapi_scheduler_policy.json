@@ -1,0 +1,38 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": [
+        "${bulkapi_secret_arn}"
+      ]
+    },
+    {
+      "Sid": "CloudWatchCreateGroup",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup"
+      ],
+      "Resource": [
+        "*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchWriteLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:logs:eu-west-1:${account_id}:log-group:/aws/lambda/${environment}-ingestion-callminer-bulkapi-scheduler:*:*",
+        "arn:aws:logs:eu-west-1:${account_id}:log-group:/aws/lambda/${environment}-ingestion-callminer-bulkapi-scheduler:*"
+      ]
+    }
+  ]
+}
