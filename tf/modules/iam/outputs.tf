@@ -1,7 +1,3 @@
-output iam_rerun_role_arn {
- value = aws_iam_role.callminer_rerun_role.arn
-}
-
 output iam_bulkapi_scheduler_role_arn {
  value = aws_iam_role.callminer_bulkapi_scheduler_role.arn
 }

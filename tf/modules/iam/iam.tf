@@ -39,15 +39,6 @@ data aws_secretsmanager_secret_version callminer_bulkapi_credentials {
 #   )
 # }
 
-resource aws_iam_role callminer_rerun_role {
-  name = "${var.environment}-hubs-data-rerun-iamrole-callminer"
-  assume_role_policy = templatefile("${var.assumedrole_policy}",
-    {
-      service_role = "lambda.amazonaws.com"
-    }
-  )
-  tags = var.tags
-}
 
 resource aws_iam_role callminer_bulkapi_scheduler_role {
   name = "${var.environment}-hubs-data-bulkapi-scheduler-iamrole-callminer"
@@ -59,28 +50,9 @@ resource aws_iam_role callminer_bulkapi_scheduler_role {
   tags = var.tags
 }
 
-
-resource aws_iam_role_policy_attachment callminer_rerun_role_policy {
-  role       = aws_iam_role.callminer_rerun_role.name
-  policy_arn = aws_iam_policy.rerun_lambda_policy.arn
-}
-
 resource aws_iam_role_policy_attachment callminer_bulkapi_scheduler_role_policy {
   role       = aws_iam_role.callminer_bulkapi_scheduler_role.name
   policy_arn = aws_iam_policy.bulkapi_scheduler_policy.arn
-}
-
-resource aws_iam_policy rerun_lambda_policy {
-  name   = "${var.environment}-rerun-lambda-policy"
-  policy = templatefile("${var.iam_rerun_lambda_policy}",
-    {
-      environment               = var.environment,
-      account_id                = var.aws_account_id,
-      tmp_kms_keys              = local.tmpf_kms_keys,
-      tmp_alert_sns_arn         = var.alert_sns_arn,
-      secretsmgr_secret_version = data.aws_secretsmanager_secret_version.callminer_credentials.arn
-    }
-  )
 }
 
 resource aws_iam_policy bulkapi_scheduler_policy {

@@ -34,7 +34,6 @@ module "iam" {
   alert_sns_arn     = module.opsgenie_lambda.alert_sns_arn
 
   assumedrole_policy                = "./templates/assumedrole_policy.json"
-  iam_rerun_lambda_policy           = "./templates/rerun_lambda_policy.json"
   iam_bulkapi_scheduler_policy      = "./templates/bulkapi_scheduler_policy.json"
   bulkapi_auth_secret_name          = local.bulkapi_auth_secret_name
 
@@ -42,21 +41,6 @@ module "iam" {
   #   module.kms.sas_s3_key_arn,
   #   module.kms.landing_zone_key_arn
   # ]
-
-  rerun_lambda_arn             = module.rerun_lambda.rerun_function_arn
-}
-
-module "rerun_lambda" {
-  source      = "./modules/rerun_lambda"
-  environment = var.environment
-  filename    = local.payload_filename
-  aws_account_id  = local.aws_account_id
-
-  event_rule_arn  = module.step_functions.event_rule_arn
-  rerun_role_arn = module.iam.iam_rerun_role_arn
-  file_loc          = local.python_file_loc
-  zipped_file_loc   = local.zipped_file_loc
-  alert_sns_arn     = module.opsgenie_lambda.alert_sns_arn
 }
 
 module "bulkapi_scheduler_lambda" {

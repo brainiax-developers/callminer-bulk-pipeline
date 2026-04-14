@@ -13,11 +13,6 @@ variable name {
   description = "Name generated from label module"
 }
 
-variable rerun_lambda_arn {
-  type        = string
-  description = "ARN of the callminer rerun lambda function"
-}
-
 variable aws_account_id {
   type        = string
   description = "The AWS ACCOUNT ID being deployed to"
@@ -46,11 +41,6 @@ variable iam_s3_kms_policy {
 variable assumedrole_policy {
   type        = string
   description = "The assumed role policy template for lambda and state machine"
-}
-
-variable iam_rerun_lambda_policy {
-  type        = string
-  description = "The IAM policy template for the rerun_lambda"
 }
 
 variable iam_bulkapi_scheduler_policy {
