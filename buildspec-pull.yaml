@@ -1,4 +1,4 @@
-# pull dependency image from build account, push to env
+# Pull scheduler image from build account, push to target environment account.
 
 version: 0.2
 
@@ -12,7 +12,6 @@ env:
 phases:
   pre_build:
     commands:
-      - rm -f .python-version
       - echo Starting pull build image and push to account
       - echo Getting current account details...
       - aws sts get-caller-identity > build_acc_details.json

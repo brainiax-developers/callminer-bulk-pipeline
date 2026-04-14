@@ -1,12 +1,13 @@
 
 locals {
-  payload_filename      = "../build/distributions/callminer-bulk-pipeline-${var.project_version}.zip"
-  aws_account_id        = data.aws_caller_identity.here.account_id
-  python_file_loc       = "../src/python"
-  zipped_file_loc       = "../src/output"
-  bulkapi_auth_secret_name =  "${var.environment}-callminer-bulkapi-creds"
-  bulkapi_holding_bucket_name = var.bulkapi_holding_bucket_name
-  bulkapi_holding_prefix = var.bulkapi_holding_prefix
+  aws_account_id                   = data.aws_caller_identity.here.account_id
+  bulkapi_auth_secret_name         = "${var.environment}-callminer-bulkapi-creds"
+  bulkapi_job_name                 = "${var.environment}-callminer-bulkapi-export-job"
+  bulkapi_storage_target_name      = "${var.environment}-callminer-bulkapi-holding-target"
+  bulkapi_holding_bucket_name      = "${var.environment}-lakehouse-holding-zone"
+  bulkapi_holding_prefix           = "callminer/export/"
+  bulkapi_export_job_schedule      = "0 0/20 * ? * *"
+  scheduler_reconcile_schedule     = "rate(1 day)"
   bulkapi_job_template_json = jsonencode({
     Duration = {
       SearchMode = "ClientCaptureDate"
@@ -20,7 +21,7 @@ locals {
     NotificationMethod = "Email"
     EmailRecipients    = []
     WebhookId          = null
-    StorageTargetName  = var.bulkapi_storage_target_name
-    Schedule           = "0 30 8 ? * *"
+    StorageTargetName  = local.bulkapi_storage_target_name
+    Schedule           = local.bulkapi_export_job_schedule
   })
 }

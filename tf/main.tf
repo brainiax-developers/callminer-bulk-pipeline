@@ -1,4 +1,10 @@
 
+data "aws_caller_identity" "here" {}
+
+data "aws_ssm_parameter" "bulkapi_scheduler_ecr_repo_url" {
+  name = "/terraform/${var.environment}/lakehouse/callminer_bulk_pipeline_ecr_repo_url"
+}
+
 module "label" {
   source         = "git@git.tech.theverygroup.com:data/platform/modules/terraform/label.git?ref=v1.0.0"
   environment    = var.environment
@@ -13,51 +19,25 @@ module "label" {
   }
 }
 
-module "cloudwatch_bulkapi_scheduler" {
-  source = "./modules/cloudwatch"
-  tags   = module.label.tags
-
-  lambda_function_name      = module.bulkapi_scheduler_lambda.bulkapi_scheduler_function_name
-  subscription_role_arn     = var.subscription_role_arn
-  firehose_destination_arn  = var.firehose_destination_arn
-  lambda_destination_arn    = module.opsgenie_lambda.opsgenie_function_arn
-  cwlog_lambda_permission   = [module.opsgenie_lambda.cwlog_lambda_permission]
-  cwrerun_lambda_permission = [module.rerun_lambda.cwrerun_lambda_permission]
-}
-
 module "iam" {
   source            = "./modules/iam"
   environment       = var.environment
   aws_account_id    = local.aws_account_id
   tags              = module.label.tags
-  name              = module.label.name
-  alert_sns_arn     = module.opsgenie_lambda.alert_sns_arn
 
-  assumedrole_policy                = "./templates/assumedrole_policy.json"
-  iam_bulkapi_scheduler_policy      = "./templates/bulkapi_scheduler_policy.json"
-  bulkapi_auth_secret_name          = local.bulkapi_auth_secret_name
-
-  # kms_keys = [
-  #   module.kms.sas_s3_key_arn,
-  #   module.kms.landing_zone_key_arn
-  # ]
+  assumedrole_policy           = "./templates/assumedrole_policy.json"
+  iam_bulkapi_scheduler_policy = "./templates/bulkapi_scheduler_policy.json"
+  bulkapi_auth_secret_name     = local.bulkapi_auth_secret_name
 }
 
 module "bulkapi_scheduler_lambda" {
-  source                  = "./modules/bulkapi_scheduler_lambda"
-  environment             = var.environment
-  file_loc                = local.python_file_loc
-  zipped_file_loc         = local.zipped_file_loc
-  scheduler_role_arn      = module.iam.iam_bulkapi_scheduler_role_arn
-  auth_secret_name        = local.bulkapi_auth_secret_name
-  bulk_job_name           = "${var.environment}-callminer-bulkapi-export-job"
-  bulk_job_previous_name  = ""
-  bulk_job_template_json  = local.bulkapi_job_template_json
-  holding_bucket_name     = local.bulkapi_holding_bucket_name
-  holding_prefix          = local.bulkapi_holding_prefix
-}
-
-module "kms" {
-  source      = "./modules/kms"
-  environment = var.environment
+  source                 = "./modules/bulkapi_scheduler_lambda"
+  environment            = var.environment
+  image_uri              = "${data.aws_ssm_parameter.bulkapi_scheduler_ecr_repo_url.value}:${var.image_version}"
+  scheduler_role_arn     = module.iam.iam_bulkapi_scheduler_role_arn
+  auth_secret_name       = local.bulkapi_auth_secret_name
+  bulk_job_name          = local.bulkapi_job_name
+  bulk_job_previous_name = var.bulk_job_previous_name
+  bulk_job_template_json = local.bulkapi_job_template_json
+  schedule_expression    = local.scheduler_reconcile_schedule
 }

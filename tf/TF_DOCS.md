@@ -1,54 +1,44 @@
-[//]: # (BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK)
+# Terraform Notes (`tf/`)
 
+This directory is the runtime stack for the CallMiner BulkAPI scheduler Lambda.
 
+## What It Deploys
 
-## Requirements
+- IAM role + policy for scheduler Lambda access to Secrets Manager + CloudWatch logs
+- Lambda function deployed from a **container image**
+- EventBridge rule/target to run the scheduler daily
 
-| Name | Version |
-|------|---------|
-| terraform | >=1.6.2 |
-| aws | >=5.22.0 |
+## Container Image Wiring
 
-## Providers
+- Lambda uses `package_type = "Image"` in [`modules/bulkapi_scheduler_lambda/lambda.tf`](/C:/Users/abhis/OneDrive/Desktop/MY%20FILES/Github/callminer-bulk-pipeline/tf/modules/bulkapi_scheduler_lambda/lambda.tf).
+- Image URI is resolved from SSM parameter:
+  - `/terraform/${environment}/lakehouse/callminer_bulk_pipeline_ecr_repo_url`
+  - final URI: `<repo_url>:<image_version>`
 
-| Name | Version |
-|------|---------|
-| aws | 6.26.0 |
-| aws.build | 6.26.0 |
+## PPLNS-7739 Defaults
 
-## Modules
+Set in [`local.tf`](/C:/Users/abhis/OneDrive/Desktop/MY%20FILES/Github/callminer-bulk-pipeline/tf/local.tf):
 
-| Name | Source | Version |
-|------|--------|---------|
-| ecr | git@git.tech.theverygroup.com:data/pipelines/modules/terraform/ecr.git | v1.1.1 |
-| label | git@git.tech.theverygroup.com:pe/public/tf-modules/pe-tf-module-tag.git | v1.6.0 |
-| lambda | git@git.tech.theverygroup.com:data/pipelines/modules/terraform/python-lambda.git | v3.0.0 |
-| ssm\_param\_ecr\_repo\_url | git@git.tech.theverygroup.com:data/platform/modules/terraform/parameter-store.git//modules/ssm_parameter_put | v1.2 |
+- Scheduler reconcile cadence (Lambda/EventBridge): `rate(1 day)`
+- Export job schedule (CallMiner cron): `0 0/20 * ? * *`
+- Storage target name default: `${environment}-callminer-bulkapi-holding-target`
+- Expected holding destination default:
+  - bucket: `${environment}-lakehouse-holding-zone`
+  - prefix: `callminer/export/`
 
-## Inputs
+Environment-specific overrides:
 
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| environment | The runtime environment | `string` | n/a | yes |
-| region | The region | `string` | `"eu-west-1"` | no |
-| business\_capability\_l0 | The Business Capability Level 0 | `string` | n/a | yes |
-| business\_capability\_l1 | The Business Capability Level 1 | `string` | n/a | yes |
-| service\_tier | The Service Tier | `string` | n/a | yes |
-| data\_classification | The Data Classification | `string` | n/a | yes |
-| created\_by | The created by repo | `string` | n/a | yes |
-| service\_owner | The Service Owner | `string` | n/a | yes |
-| service | The Service Name | `string` | n/a | yes |
-| project | The project the work belongs to | `string` | `"lakehouse"` | no |
-| category | The category of the work | `string` | `"callminer-bulk-pipeline"` | no |
-| image\_version | The version number of the ECR image for the Lambda | `string` | n/a | yes |
+- [`config/dev/vars.tfvars`](/C:/Users/abhis/OneDrive/Desktop/MY%20FILES/Github/callminer-bulk-pipeline/tf/config/dev/vars.tfvars)
+- [`config/test/vars.tfvars`](/C:/Users/abhis/OneDrive/Desktop/MY%20FILES/Github/callminer-bulk-pipeline/tf/config/test/vars.tfvars)
+- [`config/prod/vars.tfvars`](/C:/Users/abhis/OneDrive/Desktop/MY%20FILES/Github/callminer-bulk-pipeline/tf/config/prod/vars.tfvars)
 
-## Resources
+## Variables You Must Provide
 
-| Name | Type |
-|------|------|
+- `environment`
+- `image_version`
 
-## Outputs
+`image_version` is the ECR image tag for the scheduler container to deploy.
 
-No outputs.
+## Build/ECR Stack
 
-[//]: # (END OF PRE-COMMIT-TERRAFORM DOCS HOOK)
+ECR repo + repo URL SSM parameter are managed in `tf/deploy-build/`.

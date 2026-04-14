@@ -1,10 +1,6 @@
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from CallMinerBulkApiSchedulerLambda import (
+from callminer_bulk_pipeline.handlers.bulkapi_scheduler import (
     ApiError,
     CallMinerBulkApiClient,
     CallMinerBulkScheduler,
@@ -104,6 +100,33 @@ class EventContractTests(unittest.TestCase):
             )
 
 
+class SchedulerConfigTests(unittest.TestCase):
+    def test_from_env_uses_required_values_and_defaults(self):
+        config = SchedulerConfig.from_env(
+            {
+                "CALLMINER_AUTH_SECRET_NAME": "callminer-secret",
+                "BULK_JOB_NAME": "dev-callminer-bulkapi-export-job",
+                "BULK_JOB_TEMPLATE_JSON": '{"Duration":{"LastNDays":1}}',
+            }
+        )
+
+        self.assertEqual(config.auth_secret_name, "callminer-secret")
+        self.assertEqual(config.job_name, "dev-callminer-bulkapi-export-job")
+        self.assertEqual(config.bulk_api_base_url, "https://apiuk.callminer.net/bulkexport")
+        self.assertEqual(config.idp_base_url, "https://idpuk.callminer.net")
+        self.assertEqual(config.scope, "https://callminer.net/auth/platform-bulkexport")
+
+    def test_from_env_rejects_non_object_template_json(self):
+        with self.assertRaises(ValidationError):
+            SchedulerConfig.from_env(
+                {
+                    "CALLMINER_AUTH_SECRET_NAME": "callminer-secret",
+                    "BULK_JOB_NAME": "job-a",
+                    "BULK_JOB_TEMPLATE_JSON": "[]",
+                }
+            )
+
+
 class NamingTests(unittest.TestCase):
     def test_rerun_name_uses_idempotency_key_over_request_id(self):
         name = build_rerun_job_name(
@@ -134,8 +157,8 @@ class SchedulerFlowTests(unittest.TestCase):
                     "StartDate": None,
                     "EndDate": None,
                 },
-                "StorageTargetName": "StorageTarget",
-                "Schedule": "0 30 8 ? * 4#1",
+                "StorageTargetName": "dev-callminer-bulkapi-holding-target",
+                "Schedule": "0 0/20 * ? * *",
             },
         )
 
@@ -240,7 +263,7 @@ class SchedulerFlowTests(unittest.TestCase):
         self.assertEqual(result["action"], "created")
         created_payload = api.created[0]
         self.assertIsNone(created_payload["Schedule"])
-        self.assertEqual(created_payload["StorageTargetName"], "StorageTarget")
+        self.assertEqual(created_payload["StorageTargetName"], "dev-callminer-bulkapi-holding-target")
         self.assertEqual(
             created_payload["Duration"]["StartDate"],
             "2026-03-01T00:00:00Z",
