@@ -76,9 +76,6 @@ pipeline {
         }
 
         stage('Terraform Targeted Plan - ECR + SSM') {
-            when {
-                expression {params.env == 'build'}
-            }
             steps {
                 container('terraform') {
                     script {
@@ -94,10 +91,7 @@ pipeline {
 
         stage('Terraform Targeted Apply - ECR + SSM') {
             when {
-                allOf {
-                    expression {params.env == 'build'}
-                    expression {params.tfAction == 'apply'}
-                }
+                expression {params.tfAction == 'apply'}
             }
             steps {
                 container('terraform') {
@@ -117,6 +111,10 @@ pipeline {
             }
             steps {
                 script {
+                    String account = 'nonprod'
+                    if (params.env == 'prod') {
+                        account = 'prod'
+                    }
                     awsCodeBuild (
                         projectName: 'build-cip-ci-codebuild-basic-project',
                         buildSpecFile: 'buildspec-push.yaml',
@@ -227,11 +225,15 @@ def tfDo(String terraformAction, String deployToEnvironment, String planAction='
     echo "tfDo - Plan Action : ${planAction}"
     echo "tfDo - Package Version : ${packageVersion}"
     echo "tfDo - Target : ${target}"
+    String envAccount = "prod"
     String terraformDir = 'tf'
     String configPrefix = 'config'
     if (deployToEnvironment == 'build') {
         terraformDir = 'tf/deploy-build'
         configPrefix = '../config'
+    }
+    if (deployToEnvironment != "prod") {
+        envAccount = "nonprod"
     }
     String targetFlag = target ? target.split(',').collect { "-target=${it.trim()}" }.join(' ') : ""
     sh "ssh-keyscan git.tech.theverygroup.com >> ~/.ssh/known_hosts"
