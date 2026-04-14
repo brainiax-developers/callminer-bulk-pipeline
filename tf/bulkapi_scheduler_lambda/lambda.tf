@@ -12,14 +12,16 @@ resource "aws_lambda_function" "bulkapi_scheduler_lambda" {
 
   environment {
     variables = {
-      CALLMINER_BULK_API_BASE_URL = var.bulk_api_base_url
-      CALLMINER_IDP_BASE_URL      = var.idp_base_url
-      CALLMINER_BULK_SCOPE        = var.bulk_scope
+      CALLMINER_BULK_API_BASE_URL = "https://apiuk.callminer.net/bulkexport"
+      CALLMINER_IDP_BASE_URL      = "https://idpuk.callminer.net"
+      CALLMINER_BULK_SCOPE        = "https://callminer.net/auth/platform-bulkexport"
       CALLMINER_AUTH_SECRET_NAME  = var.auth_secret_name
       BULK_JOB_NAME               = var.bulk_job_name
       BULK_JOB_PREVIOUS_NAME      = var.bulk_job_previous_name
-      LOG_LEVEL                   = var.log_level
+      LOG_LEVEL                   = "INFO"
       BULK_JOB_TEMPLATE_JSON      = var.bulk_job_template_json
+      EXPECTED_HOLDING_BUCKET     = var.holding_bucket_name
+      EXPECTED_HOLDING_PREFIX     = var.holding_prefix
     }
   }
 }

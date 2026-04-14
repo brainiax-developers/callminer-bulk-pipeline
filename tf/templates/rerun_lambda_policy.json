@@ -1,0 +1,90 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SecretsManager",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource":  "${secretsmgr_secret_version}"
+    },
+    {
+      "Sid": "SecretsManagerKms",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt",
+        "kms:List*",
+        "kms:DescribeKey"
+      ],
+      "Resource": ["arn:aws:kms:::alias/aws/secretsmanager"],
+      "Condition" : {
+        "StringEquals" : {
+          "kms:ViaService": "secretsmanager.eu-west-1.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "s3Kms",
+      "Effect": "Allow",
+      "Action": [
+        "kms:Encrypt",
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:GenerateDataKey*",
+        "kms:List*",
+        "kms:ReEncrypt*"
+      ],
+      "Resource": ["${tmp_kms_keys}"],
+      "Condition" : {
+        "StringEquals" : {
+          "kms:ViaService": "s3.eu-west-1.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid" : "logsCreatePut",
+      "Action" : [
+        "logs:CreateLogStream",
+        "logs:DescribeLogStreams",
+        "logs:PutLogEvents",
+        "lambda:InvokeFunction"
+      ],
+      "Resource" :  [
+        "arn:aws:logs:eu-west-1:${account_id}:log-group:/aws/lambda/${environment}-ingestion-callminer-events:*:*",
+        "arn:aws:logs:eu-west-1:${account_id}:log-group:/aws/lambda/${environment}-ingestion-callminer-landing:*:*",
+        "arn:aws:logs:eu-west-1:${account_id}:log-group:/aws/lambda/${environment}-ingestion-callminer-transfer:*:*",
+        "arn:aws:logs:eu-west-1:${account_id}:log-group:/aws/lambda/${environment}-ingestion-callminer-rerun-lambda:*:*"],
+      "Effect" : "Allow"
+    },
+    {
+      "Sid" : "SNSSend",
+      "Action": ["sns:*"],
+      "Effect": "Allow",
+      "Resource": ["${tmp_alert_sns_arn}"]
+    },
+    {
+      "Sid": "StepFunctionStartExecution",
+      "Action": ["states:StartExecution"],
+      "Effect": "Allow",
+      "Resource": ["arn:aws:states:eu-west-1:${account_id}:stateMachine:${environment}_callminer"]
+    },
+    {
+      "Sid" : "logAll",
+      "Action" : ["logs:*"],
+      "Resource" : ["*"],
+      "Effect" : "Allow"
+    },
+    {
+      "Sid": "CloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData",
+        "logs:*",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:GetMetricData",
+        "cloudwatch:ListMetrics",
+        "cloudwatch:GetMetricStatistics"
+      ],
+      "Resource": ["*"]
+    }
+  ]
+}

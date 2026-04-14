@@ -39,28 +39,14 @@ variable "bulk_job_template_json" {
   description = "Baseline export job payload JSON used for sync/rerun operations"
 }
 
-variable "bulk_api_base_url" {
+variable "holding_bucket_name" {
   type        = string
-  description = "Base URL for CallMiner Bulk Export API"
-  default     = "https://apiuk.callminer.net/bulkexport"
+  description = "Expected holding zone bucket backing the configured storage target"
 }
 
-variable "idp_base_url" {
+variable "holding_prefix" {
   type        = string
-  description = "Base URL for CallMiner IDP token endpoint"
-  default     = "https://idpuk.callminer.net"
-}
-
-variable "bulk_scope" {
-  type        = string
-  description = "OAuth scope used for CallMiner Bulk Export access token"
-  default     = "https://callminer.net/auth/platform-bulkexport"
-}
-
-variable "log_level" {
-  type        = string
-  description = "Lambda log level"
-  default     = "INFO"
+  description = "Expected holding zone prefix backing the configured storage target"
 }
 
 variable "schedule_expression" {

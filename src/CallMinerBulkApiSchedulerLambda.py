@@ -20,14 +20,7 @@ LOGGER = logging.getLogger(__name__)
 
 ALLOWED_MODES = {"sync", "rerun"}
 ALLOWED_RERUN_KEYS = {"duration", "name_suffix", "idempotency_key"}
-ALLOWED_DURATION_OVERRIDE_KEYS = {
-    "LastNDays",
-    "LastNHours",
-    "TimeFrame",
-    "StartDate",
-    "EndDate",
-}
-ALL_DURATION_KEYS = {
+ALLOWED_DURATION_KEYS = {
     "SearchMode",
     "LastNDays",
     "LastNHours",
@@ -412,7 +405,7 @@ def normalize_event(event: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(duration, dict):
         raise ValidationError("rerun.duration must be a JSON object.")
 
-    unexpected_duration_keys = sorted(set(duration.keys()) - ALLOWED_DURATION_OVERRIDE_KEYS)
+    unexpected_duration_keys = sorted(set(duration.keys()) - ALLOWED_DURATION_KEYS)
     if unexpected_duration_keys:
         raise ValidationError(f"Unexpected duration keys: {unexpected_duration_keys}")
 
@@ -464,10 +457,10 @@ def validate_duration_payload(duration: Dict[str, Any]) -> None:
 
 
 def merge_duration(template_duration: Dict[str, Any], duration_override: Dict[str, Any]) -> Dict[str, Any]:
-    merged = {key: None for key in ALL_DURATION_KEYS}
+    merged = {key: None for key in ALLOWED_DURATION_KEYS}
 
     if isinstance(template_duration, dict):
-        for key in ALL_DURATION_KEYS:
+        for key in ALLOWED_DURATION_KEYS:
             if key in template_duration:
                 merged[key] = template_duration[key]
 
