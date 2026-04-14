@@ -3,14 +3,9 @@ variable "environment" {
   description = "The environment being deployed to"
 }
 
-variable "file_loc" {
+variable "image_uri" {
   type        = string
-  description = "Source location of Python scheduler code"
-}
-
-variable "zipped_file_loc" {
-  type        = string
-  description = "Output location of zipped Python artifacts"
+  description = "Lambda container image URI including tag"
 }
 
 variable "scheduler_role_arn" {
@@ -37,16 +32,6 @@ variable "bulk_job_previous_name" {
 variable "bulk_job_template_json" {
   type        = string
   description = "Baseline export job payload JSON used for sync/rerun operations"
-}
-
-variable "holding_bucket_name" {
-  type        = string
-  description = "Expected holding zone bucket backing the configured storage target"
-}
-
-variable "holding_prefix" {
-  type        = string
-  description = "Expected holding zone prefix backing the configured storage target"
 }
 
 variable "schedule_expression" {

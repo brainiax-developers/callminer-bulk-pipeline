@@ -31,32 +31,43 @@ variable created_by {
   default     = "data/pipelines/lakehouse/jobs/callminer"
 }
 
-variable subscription_role_arn {
+variable image_version {
   type        = string
-  description = "The ARN of an IAM role that grants CW logs permissions to deliver log events to the destination"
+  description = "Container image tag used for the scheduler Lambda deployment."
 }
 
-variable firehose_destination_arn {
+variable bulk_job_previous_name {
   type        = string
-  description = "The ARN of the destination to deliver matching log events to."
-}
-
-variable project_version {
-  type        = string
-  description = "The current version of the project "
+  description = "Optional previous job name used as a migration fallback when reconciling."
+  default     = ""
 }
 
 variable bulkapi_storage_target_name {
   type        = string
-  description = "CallMiner Bulk API storage target name that maps to the holding zone export destination"
+  description = "CallMiner Bulk API storage target name that maps to the holding zone export destination."
+  default     = ""
 }
 
 variable bulkapi_holding_bucket_name {
   type        = string
-  description = "S3 bucket used as CallMiner Bulk API export destination"
+  description = "Expected CallMiner holding destination bucket."
+  default     = ""
 }
 
 variable bulkapi_holding_prefix {
   type        = string
-  description = "S3 prefix used as CallMiner Bulk API export destination"
+  description = "Expected CallMiner holding destination prefix."
+  default     = ""
+}
+
+variable bulkapi_export_job_schedule {
+  type        = string
+  description = "Quartz cron expression for CallMiner BulkAPI export schedule."
+  default     = ""
+}
+
+variable scheduler_reconcile_schedule_expression {
+  type        = string
+  description = "EventBridge schedule expression for the daily scheduler reconciliation Lambda run."
+  default     = ""
 }

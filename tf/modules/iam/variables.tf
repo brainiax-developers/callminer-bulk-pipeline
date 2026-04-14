@@ -8,34 +8,9 @@ variable tags {
   description = "The associated tags"
 }
 
-variable name {
-  type        = string
-  description = "Name generated from label module"
-}
-
 variable aws_account_id {
   type        = string
   description = "The AWS ACCOUNT ID being deployed to"
-}
-
-variable kms_keys {
-  type       = list(string)
-  description = "A list of kms keys to give permissions to"
-}
-
-variable iam_secret_manager_policy {
-  type        = string
-  description = "The IAM policy template for the secret manager  "
-}
-
-variable iam_s3_kms_secret_manager_policy {
-  type        = string
-  description = "The IAM policy template for the s3_kms secret manager "
-}
-
-variable iam_s3_kms_policy {
-  type        = string
-  description = "The IAM policy template for the s3_kms "
 }
 
 variable assumedrole_policy {

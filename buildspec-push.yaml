@@ -7,14 +7,14 @@ env:
 phases:
   pre_build:
     commands:
-      - rm -f .python-version
       - aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin 669610644781.dkr.ecr.eu-west-1.amazonaws.com
+      - export IMAGE_NAME=callminer-bulkapi-scheduler
 
   build:
     commands:
       - echo Building the lambda image
-      - docker build --no-cache -t pythonbuild .
-      - docker tag pythonbuild:latest $ECR_REPO_URL:$VERSION
+      - docker build --pull --no-cache -t $IMAGE_NAME .
+      - docker tag $IMAGE_NAME:latest $ECR_REPO_URL:$VERSION
       - echo Finished building lambda image
 
   post_build:
