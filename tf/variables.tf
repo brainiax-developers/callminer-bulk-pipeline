@@ -71,3 +71,25 @@ variable scheduler_reconcile_schedule_expression {
   description = "EventBridge schedule expression for the daily scheduler reconciliation Lambda run."
   default     = ""
 }
+
+variable bulkapi_notification_method {
+  type        = string
+  description = "Notification method for CallMiner export jobs. Allowed values: Email or Webhook."
+
+  validation {
+    condition     = contains(["Email", "Webhook"], var.bulkapi_notification_method)
+    error_message = "bulkapi_notification_method must be either 'Email' or 'Webhook'."
+  }
+}
+
+variable bulkapi_notification_email_recipients {
+  type        = list(string)
+  description = "Notification email recipients when bulkapi_notification_method is Email."
+  default     = []
+}
+
+variable bulkapi_notification_webhook_id {
+  type        = string
+  description = "Webhook id when bulkapi_notification_method is Webhook."
+  default     = ""
+}

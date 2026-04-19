@@ -20,11 +20,22 @@ This directory is the runtime stack for the CallMiner BulkAPI scheduler Lambda.
 Set in [`local.tf`](/C:/Users/abhis/OneDrive/Desktop/MY%20FILES/Github/callminer-bulk-pipeline/tf/local.tf):
 
 - Scheduler reconcile cadence (Lambda/EventBridge): `rate(1 day)`
-- Export job schedule (CallMiner cron): `0 0/20 * ? * *`
+- Export job schedule (CallMiner cron): `0 0 * ? * *`
+- Export duration defaults:
+  - `SearchMode = "NewAndUpdated"`
+  - `LastNHours = 1`
+  - `LastNDays = null`
+  - `TimeFrame = null`
+  - `StartDate = null`
+  - `EndDate = null`
 - Storage target name default: `${environment}-callminer-bulkapi-holding-target`
 - Expected holding destination default:
   - bucket: `${environment}-lakehouse-holding-zone`
   - prefix: `callminer/export/`
+- Notification config:
+  - `bulkapi_notification_method = "Email"` requires non-empty `bulkapi_notification_email_recipients`
+  - `bulkapi_notification_method = "Webhook"` requires `bulkapi_notification_webhook_id`
+  - Terraform `check` validation enforces exactly one valid notification path.
 
 Environment-specific overrides:
 

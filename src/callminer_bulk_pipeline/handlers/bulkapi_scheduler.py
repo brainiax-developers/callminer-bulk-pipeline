@@ -8,7 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -20,6 +20,7 @@ LOGGER = logging.getLogger(__name__)
 
 ALLOWED_MODES = {"sync", "rerun"}
 ALLOWED_RERUN_KEYS = {"duration", "name_suffix", "idempotency_key"}
+ALLOWED_NOTIFICATION_METHODS = {"Email", "Webhook"}
 ALLOWED_DURATION_KEYS = {
     "SearchMode",
     "LastNDays",
@@ -28,6 +29,7 @@ ALLOWED_DURATION_KEYS = {
     "StartDate",
     "EndDate",
 }
+EMAIL_RECIPIENT_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ValidationError(ValueError):
@@ -43,6 +45,49 @@ class ApiError(RuntimeError):
 
 class DuplicateJobMatchError(RuntimeError):
     pass
+
+
+def validate_template_notification_settings(template_payload: Dict[str, Any]) -> None:
+    method = template_payload.get("NotificationMethod")
+    if method not in ALLOWED_NOTIFICATION_METHODS:
+        raise ValidationError(
+            "BULK_JOB_TEMPLATE_JSON.NotificationMethod must be one of "
+            f"{sorted(ALLOWED_NOTIFICATION_METHODS)}."
+        )
+
+    if method == "Email":
+        email_recipients = template_payload.get("EmailRecipients")
+        if not isinstance(email_recipients, list) or not email_recipients:
+            raise ValidationError(
+                "BULK_JOB_TEMPLATE_JSON.EmailRecipients must contain at least one recipient when "
+                "NotificationMethod is 'Email'."
+            )
+
+        for recipient in email_recipients:
+            if not isinstance(recipient, str) or not EMAIL_RECIPIENT_PATTERN.match(recipient.strip()):
+                raise ValidationError(
+                    "BULK_JOB_TEMPLATE_JSON.EmailRecipients must only contain valid email addresses "
+                    "when NotificationMethod is 'Email'."
+                )
+
+        webhook_id = template_payload.get("WebhookId")
+        if webhook_id not in (None, ""):
+            raise ValidationError(
+                "BULK_JOB_TEMPLATE_JSON.WebhookId must be null/empty when NotificationMethod is 'Email'."
+            )
+        return
+
+    webhook_id = template_payload.get("WebhookId")
+    if not isinstance(webhook_id, str) or not webhook_id.strip():
+        raise ValidationError(
+            "BULK_JOB_TEMPLATE_JSON.WebhookId must be set when NotificationMethod is 'Webhook'."
+        )
+
+    email_recipients = template_payload.get("EmailRecipients")
+    if email_recipients not in (None, []):
+        raise ValidationError(
+            "BULK_JOB_TEMPLATE_JSON.EmailRecipients must be empty/null when NotificationMethod is 'Webhook'."
+        )
 
 
 @dataclass(frozen=True)
@@ -70,6 +115,7 @@ class SchedulerConfig:
             raise ValidationError("BULK_JOB_TEMPLATE_JSON must be a JSON object.")
         if not isinstance(template_payload.get("Duration"), dict):
             raise ValidationError("BULK_JOB_TEMPLATE_JSON must include a JSON object at key 'Duration'.")
+        validate_template_notification_settings(template_payload)
 
         job_name = env.get("BULK_JOB_NAME", "").strip()
         if not job_name:
@@ -337,7 +383,7 @@ class CallMinerBulkScheduler:
 
         payload = copy.deepcopy(self._config.template_payload)
         payload["Name"] = rerun_name
-        payload["Schedule"] = None
+        payload.pop("Schedule", None)
         payload["Duration"] = merge_duration(payload.get("Duration", {}), duration_override)
 
         try:
@@ -413,6 +459,7 @@ def normalize_event(event: Dict[str, Any]) -> Dict[str, Any]:
         raise ValidationError("rerun.duration must include at least one allowed field.")
 
     validate_duration_payload(duration)
+    duration = normalize_duration_override(duration)
 
     for optional_key in ("name_suffix", "idempotency_key"):
         if optional_key in rerun and rerun[optional_key] is not None and not isinstance(rerun[optional_key], str):
@@ -434,14 +481,23 @@ def validate_duration_payload(duration: Dict[str, Any]) -> None:
     has_end = duration.get("EndDate") not in (None, "")
     has_days = duration.get("LastNDays") not in (None, "")
     has_hours = duration.get("LastNHours") not in (None, "")
-    has_timeframe = duration.get("TimeFrame") not in (None, "")
+    timeframe_value = duration.get("TimeFrame")
+    has_timeframe = timeframe_value not in (None, "")
+    has_custom_timeframe = isinstance(timeframe_value, str) and timeframe_value.strip().lower() == "custom"
+    has_explicit_dates = has_start and has_end
 
     if has_start != has_end:
         raise ValidationError("StartDate and EndDate must be provided together.")
 
+    if has_custom_timeframe and not has_explicit_dates:
+        raise ValidationError("TimeFrame='Custom' requires both StartDate and EndDate.")
+
+    if has_explicit_dates and has_timeframe and not has_custom_timeframe:
+        raise ValidationError("When StartDate and EndDate are set, TimeFrame must be omitted or set to 'Custom'.")
+
     explicit_strategies = [
-        has_timeframe,
-        has_start and has_end,
+        has_timeframe and not has_custom_timeframe,
+        has_explicit_dates,
         has_days,
         has_hours,
     ]
@@ -450,10 +506,57 @@ def validate_duration_payload(duration: Dict[str, Any]) -> None:
             "Duration override must use exactly one strategy: TimeFrame, StartDate/EndDate, LastNDays, or LastNHours."
         )
 
-    if not any([has_start and has_end, has_days, has_hours, has_timeframe]):
+    if not any([has_explicit_dates, has_days, has_hours, has_timeframe]):
         raise ValidationError(
             "Duration must include either StartDate+EndDate, LastNDays, LastNHours, or TimeFrame."
         )
+
+    if has_explicit_dates:
+        start_datetime = parse_iso8601_datetime_utc(duration.get("StartDate"), field_name="StartDate")
+        end_datetime = parse_iso8601_datetime_utc(duration.get("EndDate"), field_name="EndDate")
+        if end_datetime <= start_datetime:
+            raise ValidationError("EndDate must be greater than StartDate.")
+
+        range_delta = end_datetime - start_datetime
+        if range_delta % timedelta(days=1) != timedelta(0):
+            raise ValidationError(
+                "StartDate and EndDate custom ranges must use whole-day (24-hour) increments in UTC."
+            )
+
+
+def normalize_duration_override(duration_override: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = copy.deepcopy(duration_override)
+    has_start = normalized.get("StartDate") not in (None, "")
+    has_end = normalized.get("EndDate") not in (None, "")
+
+    if has_start and has_end:
+        start_datetime = parse_iso8601_datetime_utc(normalized.get("StartDate"), field_name="StartDate")
+        end_datetime = parse_iso8601_datetime_utc(normalized.get("EndDate"), field_name="EndDate")
+        normalized["StartDate"] = format_iso8601_utc(start_datetime)
+        normalized["EndDate"] = format_iso8601_utc(end_datetime)
+        normalized["TimeFrame"] = "Custom"
+
+    return normalized
+
+
+def parse_iso8601_datetime_utc(raw_value: Any, field_name: str) -> datetime:
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise ValidationError(f"{field_name} must be a non-empty ISO8601 datetime string.")
+
+    normalized = raw_value.strip().replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValidationError(f"{field_name} must be a valid ISO8601 datetime string.") from exc
+
+    if parsed.tzinfo is None:
+        raise ValidationError(f"{field_name} must include a UTC offset (for example, a trailing 'Z').")
+
+    return parsed.astimezone(timezone.utc)
+
+
+def format_iso8601_utc(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def merge_duration(template_duration: Dict[str, Any], duration_override: Dict[str, Any]) -> Dict[str, Any]:
@@ -476,7 +579,7 @@ def merge_duration(template_duration: Dict[str, Any], duration_override: Dict[st
     if has_start or has_end:
         merged["LastNDays"] = None
         merged["LastNHours"] = None
-        merged["TimeFrame"] = None
+        merged["TimeFrame"] = "Custom"
     elif has_timeframe:
         merged["StartDate"] = None
         merged["EndDate"] = None

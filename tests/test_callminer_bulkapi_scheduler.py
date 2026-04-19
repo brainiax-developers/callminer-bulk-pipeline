@@ -99,6 +99,50 @@ class EventContractTests(unittest.TestCase):
                 }
             )
 
+    def test_rerun_rejects_partial_day_custom_range(self):
+        with self.assertRaises(ValidationError):
+            normalize_event(
+                {
+                    "mode": "rerun",
+                    "rerun": {
+                        "duration": {
+                            "StartDate": "2026-03-01T00:00:00Z",
+                            "EndDate": "2026-03-01T12:00:00Z",
+                        }
+                    },
+                }
+            )
+
+    def test_rerun_rejects_custom_timeframe_without_dates(self):
+        with self.assertRaises(ValidationError):
+            normalize_event(
+                {
+                    "mode": "rerun",
+                    "rerun": {
+                        "duration": {
+                            "TimeFrame": "Custom",
+                        }
+                    },
+                }
+            )
+
+    def test_rerun_normalizes_custom_date_range_to_utc(self):
+        normalized = normalize_event(
+            {
+                "mode": "rerun",
+                "rerun": {
+                    "duration": {
+                        "StartDate": "2026-03-01T01:00:00+01:00",
+                        "EndDate": "2026-03-02T01:00:00+01:00",
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(normalized["rerun"]["duration"]["TimeFrame"], "Custom")
+        self.assertEqual(normalized["rerun"]["duration"]["StartDate"], "2026-03-01T00:00:00Z")
+        self.assertEqual(normalized["rerun"]["duration"]["EndDate"], "2026-03-02T00:00:00Z")
+
 
 class SchedulerConfigTests(unittest.TestCase):
     def test_from_env_uses_required_values_and_defaults(self):
@@ -106,7 +150,12 @@ class SchedulerConfigTests(unittest.TestCase):
             {
                 "CALLMINER_AUTH_SECRET_NAME": "callminer-secret",
                 "BULK_JOB_NAME": "dev-callminer-bulkapi-export-job",
-                "BULK_JOB_TEMPLATE_JSON": '{"Duration":{"LastNDays":1}}',
+                "BULK_JOB_TEMPLATE_JSON": (
+                    '{"Duration":{"LastNHours":1},'
+                    '"NotificationMethod":"Email",'
+                    '"EmailRecipients":["callminer.bulkapi@theverygroup.com"],'
+                    '"WebhookId":null}'
+                ),
             }
         )
 
@@ -123,6 +172,21 @@ class SchedulerConfigTests(unittest.TestCase):
                     "CALLMINER_AUTH_SECRET_NAME": "callminer-secret",
                     "BULK_JOB_NAME": "job-a",
                     "BULK_JOB_TEMPLATE_JSON": "[]",
+                }
+            )
+
+    def test_from_env_rejects_email_notification_without_recipients(self):
+        with self.assertRaises(ValidationError):
+            SchedulerConfig.from_env(
+                {
+                    "CALLMINER_AUTH_SECRET_NAME": "callminer-secret",
+                    "BULK_JOB_NAME": "dev-callminer-bulkapi-export-job",
+                    "BULK_JOB_TEMPLATE_JSON": (
+                        '{"Duration":{"LastNHours":1},'
+                        '"NotificationMethod":"Email",'
+                        '"EmailRecipients":[],'
+                        '"WebhookId":null}'
+                    ),
                 }
             )
 
@@ -150,15 +214,18 @@ class SchedulerFlowTests(unittest.TestCase):
             previous_job_name="OldScheduledJob",
             template_payload={
                 "Duration": {
-                    "SearchMode": "ClientCaptureDate",
-                    "LastNDays": 1,
-                    "LastNHours": None,
+                    "SearchMode": "NewAndUpdated",
+                    "LastNDays": None,
+                    "LastNHours": 1,
                     "TimeFrame": None,
                     "StartDate": None,
                     "EndDate": None,
                 },
                 "StorageTargetName": "dev-callminer-bulkapi-holding-target",
-                "Schedule": "0 0/20 * ? * *",
+                "NotificationMethod": "Email",
+                "EmailRecipients": ["callminer.bulkapi@theverygroup.com"],
+                "WebhookId": None,
+                "Schedule": "0 0 * ? * *",
             },
         )
 
@@ -193,6 +260,10 @@ class SchedulerFlowTests(unittest.TestCase):
         self.assertEqual(result["action"], "created")
         self.assertEqual(result["job_id"], "1001")
         self.assertEqual(api.created[0]["Name"], "ScheduledJob")
+        self.assertEqual(api.created[0]["Schedule"], "0 0 * ? * *")
+        self.assertEqual(api.created[0]["Duration"]["SearchMode"], "NewAndUpdated")
+        self.assertEqual(api.created[0]["Duration"]["LastNHours"], 1)
+        self.assertIsNone(api.created[0]["Duration"]["LastNDays"])
 
     def test_rerun_is_idempotent_when_same_name_exists(self):
         existing_name = "ScheduledJob__rerun__last_24h__idem-1"
@@ -243,7 +314,7 @@ class SchedulerFlowTests(unittest.TestCase):
         self.assertEqual(result["action"], "already_exists")
         self.assertEqual(result["job_id"], "502")
 
-    def test_rerun_forces_schedule_null_and_preserves_protected_fields(self):
+    def test_rerun_omits_schedule_and_preserves_protected_fields(self):
         api = FakeApiClient(jobs=[], create_response={"Id": "777"})
         scheduler = CallMinerBulkScheduler(config=self._config(), api_client=api)
 
@@ -254,7 +325,7 @@ class SchedulerFlowTests(unittest.TestCase):
                 "rerun": {
                     "duration": {
                         "StartDate": "2026-03-01T00:00:00Z",
-                        "EndDate": "2026-03-01T23:59:59Z",
+                        "EndDate": "2026-03-02T00:00:00Z",
                     },
                 },
             }
@@ -262,16 +333,38 @@ class SchedulerFlowTests(unittest.TestCase):
 
         self.assertEqual(result["action"], "created")
         created_payload = api.created[0]
-        self.assertIsNone(created_payload["Schedule"])
+        self.assertNotIn("Schedule", created_payload)
         self.assertEqual(created_payload["StorageTargetName"], "dev-callminer-bulkapi-holding-target")
+        self.assertEqual(created_payload["Duration"]["TimeFrame"], "Custom")
         self.assertEqual(
             created_payload["Duration"]["StartDate"],
             "2026-03-01T00:00:00Z",
         )
         self.assertEqual(
             created_payload["Duration"]["EndDate"],
-            "2026-03-01T23:59:59Z",
+            "2026-03-02T00:00:00Z",
         )
+
+    def test_rerun_custom_date_range_is_normalized_to_utc(self):
+        api = FakeApiClient(jobs=[], create_response={"Id": "778"})
+        scheduler = CallMinerBulkScheduler(config=self._config(), api_client=api)
+
+        scheduler.handle(
+            {
+                "mode": "rerun",
+                "rerun": {
+                    "duration": {
+                        "StartDate": "2026-03-01T01:00:00+01:00",
+                        "EndDate": "2026-03-02T01:00:00+01:00",
+                    },
+                },
+            }
+        )
+
+        created_payload = api.created[0]
+        self.assertEqual(created_payload["Duration"]["TimeFrame"], "Custom")
+        self.assertEqual(created_payload["Duration"]["StartDate"], "2026-03-01T00:00:00Z")
+        self.assertEqual(created_payload["Duration"]["EndDate"], "2026-03-02T00:00:00Z")
 
 
 class ApiClientTests(unittest.TestCase):
@@ -344,15 +437,15 @@ class DurationMergeTests(unittest.TestCase):
             },
             duration_override={
                 "StartDate": "2026-03-01T00:00:00Z",
-                "EndDate": "2026-03-01T23:59:59Z",
+                "EndDate": "2026-03-02T00:00:00Z",
             },
         )
 
         self.assertEqual(merged["StartDate"], "2026-03-01T00:00:00Z")
-        self.assertEqual(merged["EndDate"], "2026-03-01T23:59:59Z")
+        self.assertEqual(merged["EndDate"], "2026-03-02T00:00:00Z")
         self.assertIsNone(merged["LastNDays"])
         self.assertIsNone(merged["LastNHours"])
-        self.assertIsNone(merged["TimeFrame"])
+        self.assertEqual(merged["TimeFrame"], "Custom")
 
     def test_last_n_days_override_clears_timeframe_and_dates(self):
         merged = merge_duration(
