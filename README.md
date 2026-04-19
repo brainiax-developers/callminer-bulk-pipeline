@@ -24,17 +24,28 @@ Test imports target the package path directly:
 ## Scheduler Behavior
 
 - Reconciliation Lambda cadence: **daily** (`rate(1 day)` by default).
-- CallMiner export job cadence: **every 20 minutes** (`0 0/20 * ? * *` in job template).
+- CallMiner export job cadence: **hourly** (`0 0 * ? * *` in job template).
 - Sync mode: finds configured job by name and creates/updates it.
-- Rerun mode: creates one-off job (`Schedule = null`) and only allows `Duration` overrides plus naming/idempotency controls.
+- Rerun mode: creates one-off job by **omitting** the `Schedule` field and only allows `Duration` overrides plus naming/idempotency controls.
 
 ## Operational Defaults
 
 Defaults are centralized in Terraform locals and can be overridden via variables.
 
+- Duration defaults:
+  - `SearchMode = "NewAndUpdated"`
+  - `LastNHours = 1`
+  - `LastNDays = null`
+  - `TimeFrame = null`
+  - `StartDate = null`
+  - `EndDate = null`
 - Storage target name: `${environment}-callminer-bulkapi-holding-target`
 - Expected holding bucket: `${environment}-lakehouse-holding-zone`
 - Expected holding prefix: `callminer/export/`
+- Notification config is explicit:
+  - `bulkapi_notification_method = "Email"` requires non-empty `bulkapi_notification_email_recipients`
+  - `bulkapi_notification_method = "Webhook"` requires `bulkapi_notification_webhook_id`
+  - Terraform and runtime validation enforce that exactly one notification path is configured.
 
 Environment overrides live in:
 
