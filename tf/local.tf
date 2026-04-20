@@ -4,22 +4,12 @@ locals {
   bulkapi_auth_secret_name = "${var.environment}-callminer-bulkapi-creds"
   bulkapi_job_name         = "${var.environment}-callminer-bulkapi-export-job"
 
-  bulkapi_storage_target_name = trimspace(var.bulkapi_storage_target_name) != "" ? trimspace(
-    var.bulkapi_storage_target_name
-  ) : "${var.environment}-callminer-bulkapi-holding-target"
-  bulkapi_holding_bucket_name = trimspace(var.bulkapi_holding_bucket_name) != "" ? trimspace(
-    var.bulkapi_holding_bucket_name
-  ) : "${var.environment}-lakehouse-holding-zone"
-  bulkapi_holding_prefix = trimspace(var.bulkapi_holding_prefix) != "" ? trimspace(
-    var.bulkapi_holding_prefix
-  ) : "callminer/export/"
+  bulkapi_storage_target_name = "${var.environment}-callminer-bulkapi-holding-target"
+  bulkapi_holding_bucket_name = "${var.environment}-lakehouse-holding-zone"
+  bulkapi_holding_prefix = "callminer/export/"
 
-  bulkapi_export_job_schedule = trimspace(var.bulkapi_export_job_schedule) != "" ? trimspace(
-    var.bulkapi_export_job_schedule
-  ) : "0 0 * ? * *"
-  scheduler_reconcile_schedule = trimspace(var.scheduler_reconcile_schedule_expression) != "" ? trimspace(
-    var.scheduler_reconcile_schedule_expression
-  ) : "rate(1 day)"
+  bulkapi_export_job_schedule = "0 0 * ? * *"
+  scheduler_reconcile_schedule = "rate(1 day)"
 
   bulkapi_notification_method = var.bulkapi_notification_method
   bulkapi_notification_email_recipients = [
