@@ -8,6 +8,42 @@ variable project {
   description = "The project the work belongs to"
 }
 
+variable service_owner {
+  type        = string
+  description = "TVG mandatory tag value: service owner"
+  default     = ""
+}
+
+variable service {
+  type        = string
+  description = "TVG mandatory tag value: service"
+  default     = ""
+}
+
+variable business_capability_l0 {
+  type        = string
+  description = "TVG mandatory tag value: business capability level 0"
+  default     = ""
+}
+
+variable business_capability_l1 {
+  type        = string
+  description = "TVG mandatory tag value: business capability level 1"
+  default     = ""
+}
+
+variable service_tier {
+  type        = string
+  description = "TVG mandatory tag value: service tier"
+  default     = ""
+}
+
+variable data_classification {
+  type        = string
+  description = "TVG mandatory tag value: data classification"
+  default     = ""
+}
+
 variable usage {
   type        = string
   default     = ""

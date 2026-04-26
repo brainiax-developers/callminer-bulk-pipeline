@@ -15,4 +15,4 @@ ENV PYTHONPATH=/opt/python
 # Copy handler code directly into task root
 COPY ./src ${LAMBDA_TASK_ROOT}
 
-CMD ["pyiceberg_make_table.lambda_handler"]
+CMD ["callminer_bulk_pipeline.handlers.bulkapi_scheduler.lambda_handler"]

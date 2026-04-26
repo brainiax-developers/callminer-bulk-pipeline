@@ -44,7 +44,7 @@ pipeline {
                 script {
                     currentBuild.displayName = "${currentBuild.displayName}-${params.env}-${params.tfAction}"
                     env.GIT_REPO_NAME = env.GIT_URL.replaceFirst(/^.*\/([^\/]+?).git$/, '$1')
-                    packageVersion = readFile('.version')
+                    packageVersion = readFile('.version').trim()
                 }
             }
         }
