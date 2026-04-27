@@ -1,10 +1,6 @@
 
 data "aws_caller_identity" "here" {}
 
-data "aws_ssm_parameter" "bulkapi_scheduler_ecr_repo_url" {
-  name = "/terraform/${var.environment}/lakehouse/callminer_bulk_pipeline_ecr_repo_url"
-}
-
 module "label" {
   source         = "git@git.tech.theverygroup.com:data/platform/modules/terraform/label.git?ref=v1.0.0"
   environment    = var.environment
@@ -33,7 +29,7 @@ module "iam" {
 module "bulkapi_scheduler_lambda" {
   source                 = "./modules/bulkapi_scheduler_lambda"
   environment            = var.environment
-  image_uri              = "${data.aws_ssm_parameter.bulkapi_scheduler_ecr_repo_url.value}:${var.image_version}"
+  image_uri              = "${module.ecr.ecr_repository_url}:${var.image_version}"
   scheduler_role_arn     = module.iam.iam_bulkapi_scheduler_role_arn
   auth_secret_name       = local.bulkapi_auth_secret_name
   bulk_job_name          = local.bulkapi_job_name

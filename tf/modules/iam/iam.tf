@@ -1,5 +1,9 @@
-data "aws_secretsmanager_secret_version" "callminer_bulkapi_credentials" {
-  secret_id = var.bulkapi_auth_secret_name
+data "aws_partition" "current" {}
+
+data "aws_region" "current" {}
+
+locals {
+  bulkapi_secret_arn = "arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.name}:${var.aws_account_id}:secret:${var.bulkapi_auth_secret_name}*"
 }
 
 resource "aws_iam_role" "callminer_bulkapi_scheduler_role" {
@@ -23,7 +27,7 @@ resource "aws_iam_policy" "bulkapi_scheduler_policy" {
     {
       environment        = var.environment,
       account_id         = var.aws_account_id,
-      bulkapi_secret_arn = data.aws_secretsmanager_secret_version.callminer_bulkapi_credentials.arn
+      bulkapi_secret_arn = local.bulkapi_secret_arn
     }
   )
 }

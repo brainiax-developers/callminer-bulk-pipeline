@@ -1,10 +1,11 @@
 
 locals {
   aws_account_id           = data.aws_caller_identity.here.account_id
-  bulkapi_auth_secret_name = "${var.environment}-callminer-bulkapi-creds"
+  bulkapi_auth_secret_name = "${var.environment}/callminer/api-credentials"
   bulkapi_job_name         = "${var.environment}-callminer-bulkapi-export-job"
 
-  bulkapi_storage_target_name = "${var.environment}-callminer-bulkapi-holding-target"
+
+  bulkapi_storage_target_name = "${var.environment}CallminerHoldingZone"
   bulkapi_holding_bucket_name = "${var.environment}-lakehouse-holding-zone"
   bulkapi_holding_prefix = "callminer/export/"
 
