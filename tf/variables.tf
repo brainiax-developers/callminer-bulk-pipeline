@@ -8,6 +8,12 @@ variable project {
   description = "The project the work belongs to"
 }
 
+variable "region" {
+  description = "The region"
+  type        = string
+  default     = "eu-west-1"
+}
+
 variable service_owner {
   type        = string
   description = "TVG mandatory tag value: service owner"

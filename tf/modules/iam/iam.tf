@@ -1,9 +1,7 @@
 data "aws_partition" "current" {}
 
-data "aws_region" "current" {}
-
 locals {
-  bulkapi_secret_arn = "arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.name}:${var.aws_account_id}:secret:${var.bulkapi_auth_secret_name}*"
+  bulkapi_secret_arn = "arn:${data.aws_partition.current.partition}:secretsmanager:${var.region}:${var.aws_account_id}:secret:${var.bulkapi_auth_secret_name}*"
 }
 
 resource "aws_iam_role" "callminer_bulkapi_scheduler_role" {
@@ -22,7 +20,7 @@ resource "aws_iam_role_policy_attachment" "callminer_bulkapi_scheduler_role_poli
 }
 
 resource "aws_iam_policy" "bulkapi_scheduler_policy" {
-  name   = "${var.environment}-bulkapi-scheduler-lambda-policy"
+  name = "${var.environment}-bulkapi-scheduler-lambda-policy"
   policy = templatefile("${var.iam_bulkapi_scheduler_policy}",
     {
       environment        = var.environment,
