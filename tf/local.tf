@@ -23,10 +23,10 @@ locals {
 
   bulkapi_job_template_json = jsonencode({
     Duration = {
-      SearchMode = "NewAndUpdated"
-      LastNDays  = null
-      LastNHours = 1
-      TimeFrame  = null
+      SearchMode = "NewAndUpdated"    #Allowed options: [ClientCaptureDate, CreateDate, Updated, NewAndUpdated]
+      LastNDays  = null               #Set number of days worth of data from Callminer job start time
+      LastNHours = 1                  #Set number of hours worth of data from Callminer job start time
+      TimeFrame  = null               #Allowed options: [Yesterday, LastWeek, ThisMonth, LastMonth, Custom]
       StartDate  = null
       EndDate    = null
     }
