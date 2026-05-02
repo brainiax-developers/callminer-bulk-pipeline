@@ -9,8 +9,8 @@ locals {
   bulkapi_holding_bucket_name = "${var.environment}-lakehouse-holding-zone"
   bulkapi_holding_prefix = "callminer/export/"
 
-  bulkapi_export_job_schedule = "0 0 * ? * *"
-  scheduler_reconcile_schedule = "rate(1 day)"
+  bulkapi_export_job_schedule = "0 10 * ? * *"
+  scheduler_reconcile_schedule = "cron(15 0 * * ? *)"
 
   bulkapi_notification_method = var.bulkapi_notification_method
   bulkapi_notification_email_recipients = [
