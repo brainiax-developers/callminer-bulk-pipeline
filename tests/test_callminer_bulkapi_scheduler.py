@@ -466,5 +466,19 @@ class DurationMergeTests(unittest.TestCase):
         self.assertIsNone(merged["EndDate"])
 
 
+class ImportCompatibilityTests(unittest.TestCase):
+    def test_can_import_bulkapi_reruns_module(self):
+        from callminer_bulk_pipeline.handlers import bulkapi_reruns
+
+        self.assertIsNotNone(bulkapi_reruns)
+
+    def test_scheduler_reexports_rerun_helpers(self):
+        from callminer_bulk_pipeline.handlers import bulkapi_scheduler
+
+        self.assertTrue(callable(bulkapi_scheduler.normalize_event))
+        self.assertTrue(callable(bulkapi_scheduler.build_rerun_job_name))
+        self.assertTrue(callable(bulkapi_scheduler.merge_duration))
+
+
 if __name__ == "__main__":
     unittest.main()
